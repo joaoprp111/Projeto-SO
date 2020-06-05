@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
-#define MAX_ARG_SIZE 1024
+#define SIZE 1024
 
 char* parsing(char *buffer){
 	if(buffer){
@@ -17,45 +17,38 @@ char* parsing(char *buffer){
 }
 
 int main(int argc, char const *argv[]) {
-    char buffer[MAX_ARG_SIZE];
-    int fd_fifo, fd_log;
-    int bytes_read;
-    if (mkfifo("fifo_servidor", 0666) == -1)
-        perror("Mkfifo");
-    if ((fd_log = open("log.txt", O_CREAT | O_TRUNC | O_WRONLY, 0666)) == -1) {
-        perror("Open log.txt");
-        return -1;
-    }   
-    else printf("[DEBUG] opened file for writing.\n");
 
-    while (1) {
-        bzero(buffer, 1024);
-	if ((fd_fifo = open("fifo_servidor", O_RDONLY)) == -1)
-            perror("Open FIFO");
-   
-       	else
-            printf("[DEBUG] opened FIFO for reading\n");
+	/*O servidor quando arranca já deve ter o fifo criado */
 
-        bytes_read = read(fd_fifo, buffer, MAX_ARG_SIZE);
-        write(1, buffer, bytes_read);
-        write(1, "\n", 1);
-        printf("[DEBUG] wrote %s to stdout\n", buffer);
-	char* p = buffer;
-	p = strtok(p, "_");
-	if (strcmp(p,"executar") == 0) printf ("tarefa: executar\n");
-	else if (strcmp(p,"listar") == 0) printf ("tarefa: listar\n");
-	char** argumento;
-	int i = 0;
-	while(argumento[i] = parsing(p)){
-		printf("Argumento: %s\n", argumento[i]);
-		i++;
+	/* Assumindo que o fifo está aberto, agora o servidor lê do fifo e faz parsing dos comandos*/
+	char** tarefasExecucao = NULL; /* Array que guarda as strings que representam tarefas em execução */
+	int numTarefasExecucao = 0;
+	char bufferLeitura[SIZE];
+	int fd_leitura_canal; /* Descritor de leitura do fifo */
+	int bytesread = 1;
+	char* str1 = "À espera que o cliente abra o canal de comunicação para escrever (...) ";
+	write(1, str1, strlen(str1));
+
+        if((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) == -1){
+		perror("Erro ao abrir o fifo");
+		exit(-1);
 	}
 
-        if (bytes_read == 0)
-	printf("[DEBUG] EOF\n");
-	close (fd_fifo);
-    }
-    close(fd_log);
+	char* outStr = "Já está, servidor iniciado!\n";
+	write(1, outStr, strlen(outStr));
 
-    return 0;
+	while(bytesread > 0){
+		bytesread = read(fd_leitura_canal, bufferLeitura, SIZE);
+		char* pointer = bufferLeitura;
+		pointer = strtok(pointer, "_");
+		while(pointer = parsing(pointer)){
+			tarefasExecucao = (char**) realloc(tarefasExecucao, (numTarefasExecucao+1) * sizeof(char*));
+               	        tarefasExecucao[numTarefasExecucao++] = strdup(pointer);
+                        printf("debug parsing: %s\n", tarefasExecucao[numTarefasExecucao-1]);
+		}
+	}
+
+	close(fd_leitura_canal);
+
+	exit(0);
 }

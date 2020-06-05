@@ -7,25 +7,22 @@
 
 int main(int argc, char const *argv[]) {
 
-    int fd_fifo;
+    int fd_escrita_canal;
 
-    if ((fd_fifo = open("fifo_servidor", O_WRONLY)) == -1) {
-        perror("Open");
-    }
-    else {
-        printf("opened FIFO for writing\n");
+    if ((fd_escrita_canal = open("canalClienteServidor", O_WRONLY)) == -1) {
+        perror("Abrir o fifo");
     }
 
     int i;
-    write(fd_fifo, argv[1], strlen(argv[1]));
-    write(fd_fifo,"_", 1);
+    write(fd_escrita_canal, argv[1], strlen(argv[1]));
+    write(fd_escrita_canal,"_", 1);
 
     for(i = 2; i < argc; i++){
-	write(fd_fifo, argv[i], strlen(argv[i]));
-	write(fd_fifo,"_", 1);
+	write(fd_escrita_canal, argv[i], strlen(argv[i]));
+	write(fd_escrita_canal,"_", 1);
     }
 
-    close(fd_fifo);
+    close(fd_escrita_canal);
 
     return 0;
 }
