@@ -35,14 +35,17 @@ int main(int argc, char const *argv[]) {
                 char bufferLeitura[SIZE];
                 char bufferAux[SIZE];
                 int bytesread = 0;
+		int k = 0;
 
                 while((bytesread = read(fd_leitura_canal, bufferLeitura, SIZE)) > 0){
                         write(1, bufferLeitura, bytesread);
+			k++;
                 }
 
                 printf("\n%s\n", bufferLeitura);
-
-                /*int i;
+		printf("%d\n",k);
+		/*numTarefasExecucao = parsing(bufferLeitura,&array,numTarefasExecucao);
+                int i;
                 printf("Flag: %s\n", array[0]);
                 for(i = 1; i < numTarefasExecucao-1; i++) printf("%s\n", array[i]);*/
 
