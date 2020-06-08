@@ -37,14 +37,19 @@ int main(int argc, char const *argv[]) {
 	char* outStr = "Já está, servidor iniciado!\n";
 	write(1, outStr, strlen(outStr));
 
-	while(bytesread > 0){
+	while(1){
+		bzero(bufferLeitura, SIZE);
 		bytesread = read(fd_leitura_canal, bufferLeitura, SIZE);
 		char* pointer = bufferLeitura;
-		pointer = strtok(pointer, "_");
+		if(pointer){
+			pointer = strtok(pointer, "_");
+			printf("%s\n", pointer);
+		}
 		while(pointer = parsing(pointer)){
+			printf("%s\n", pointer);
 			tarefasExecucao = (char**) realloc(tarefasExecucao, (numTarefasExecucao+1) * sizeof(char*));
                	        tarefasExecucao[numTarefasExecucao++] = strdup(pointer);
-                        printf("debug parsing: %s\n", tarefasExecucao[numTarefasExecucao-1]);
+                        printf("debug parsing: %s -> posicao do array %d\n", tarefasExecucao[numTarefasExecucao-1], numTarefasExecucao-1);
 		}
 	}
 
