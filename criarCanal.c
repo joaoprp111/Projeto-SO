@@ -12,7 +12,7 @@ int main(int argc, char const *argv[]) {
 	}
 	
 	char* mensagem = "Canal criado com sucesso!\n";
-	write(1, mensagem, strlen(mensagem));
+	write(1, mensagem, strlen(mensagem)+1);
 
 	exit(0);
 }

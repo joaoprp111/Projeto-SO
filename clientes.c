@@ -14,11 +14,9 @@ int main(int argc, char const *argv[]) {
     }
 
     int i;
-    write(fd_escrita_canal, argv[1], strlen(argv[1]));
-    write(fd_escrita_canal,"_", 1);
 
-    for(i = 2; i < argc; i++){
-	write(fd_escrita_canal, argv[i], strlen(argv[i]));
+    for(i = 1; i < argc; i++){
+	write(fd_escrita_canal, argv[i], strlen(argv[i])+1);
 	write(fd_escrita_canal,"_", 1);
     }
 
