@@ -9,8 +9,16 @@
 
 #define SIZE 512
 
+typedef struct tarefa{
+        char* comando;
+        int terminada; // 1 terminada, 0 em execução
+        int pid;
+        int* pidfilhos;
+} *Tarefa;
+
+Tarefa *tarefas = NULL;
 int tempoExecucaoMax = 10; // em segundos
-int tempoExecucao = -1;
+int numTarefas = 0;
  
 void swap(char a, char b){
         char aux = b;
@@ -76,11 +84,11 @@ int exec_command(char* comandos, int n){
         return exec_ret;
 }
 
-int executar(char** comandos, int numComandos, int fd_log){
+int executar(char** comandos, int numComandos, int fd_log, int* pids){
         int i, pid;
         int status[numComandos];
         int p[numComandos-1][2];
-        sleep(30);
+        sleep(12);
 
         for(i = 0; i < numComandos; i++){
                 //Primeiro comando
@@ -101,6 +109,7 @@ int executar(char** comandos, int numComandos, int fd_log){
                                         _exit(-1);
                                 default:
                                         close(p[i][1]);
+                                        pids[i] = pid;
                         }
                 }
                 //Ultimo comando
@@ -108,7 +117,7 @@ int executar(char** comandos, int numComandos, int fd_log){
                         switch(pid = fork()){
                                 case -1:
                                         perror("fork");
-                                        return -1;
+                                        return (-1);
                                 case 0:
                                         dup2(p[i-1][0], 0);
                                         close(p[i-1][0]);
@@ -117,18 +126,19 @@ int executar(char** comandos, int numComandos, int fd_log){
                                         _exit(-1);
                                 default:
                                         close(p[i-1][0]);
+                                        pids[i] = pid;
                         }
                 }
                 //Comandos intermedios
                 else{
                         if(pipe(p[i]) != 0){
                                 perror("pipe");
-                                return -1;
+                                return (-1);
                         }
                         switch(pid = fork()){
                                 case -1:
                                         perror("fork");
-                                        return -1;
+                                        return (-1);
                                 case 0:
                                         close(p[i][0]);
                                         dup2(p[i][1], 1);
@@ -142,6 +152,7 @@ int executar(char** comandos, int numComandos, int fd_log){
                                 default:
                                         close(p[i][1]);
                                         close(p[i-1][0]);
+                                        pids[i] = pid;
 
                         }
                 }
@@ -198,21 +209,22 @@ char** parsing(char* bufferLeitura, int *numComandos){
 }
 
 void sig_alrm_handler(int signum){
-    tempoExecucao++;
-    if(tempoExecucao == tempoExecucaoMax) printf("\nATINGIU LIMITE DE EXECUÇÃO\n");
-    alarm(1);
+    printf("\n[DEBUG] ATINGIU LIMITE DE EXECUÇÃO\n");
+}
+
+void sig_chld_handler(int signum){
+        wait(NULL);
 }
 
 int main(int argc, char *argv[]) {
 
 
         signal(SIGALRM, sig_alrm_handler);
+        signal(SIGCHLD, sig_chld_handler);
 
         /*O servidor quando arranca já deve ter o fifo criado */
 
         /* Assumindo que o fifo está aberto, agora o servidor lê do fifo e faz parsing dos comandos*/
-        char** tarefasExecucao = NULL; /* Array que guarda as strings que representam tarefas em execução */
-        int numExecucao = 0;
         int fd_leitura_canal = -1, fd_escrita_canal = -1; /* Descritor de leitura do fifo */
         int fd_log = open("log.txt", O_CREAT | O_RDWR | O_TRUNC, 0660);
         if(fd_log < 0){
@@ -236,25 +248,48 @@ int main(int argc, char *argv[]) {
                 //for(int i = 0; i < numComandos; i++) printf("comandos[%d]: %s\n", i, comandos[i]);
 
                 if(strcmp(comandos[0],"-e") == 0){
-                        tempoExecucao = 0;
-                        tarefasExecucao = (char**) realloc(tarefasExecucao, (numExecucao+1)*sizeof(char*));
-                        tarefasExecucao[numExecucao++] = strdup(bufferLeitura+3); /* Para remover a flag e o espaço */
-                        
+
+                        tarefas = (Tarefa*) realloc(tarefas, (numTarefas+1)*sizeof(Tarefa));
+                        Tarefa aux = tarefas[numTarefas++];
+                        aux = (Tarefa) malloc(sizeof(struct tarefa));
+                        aux->comando = strdup(bufferLeitura+3);  /*Para remover a flag e o espaço */
+                        aux->terminada = 0;
+
                         char* n;
-                        n = itoa(numExecucao, n);
+                        n = itoa(numTarefas, n);
                         char output[14] = "nova tarefa #";
                         strcat(output, n);
                         strcat(output, "\n");
                         write(fd_escrita_canal, output, strlen(output)+1);
 
-                        if(fork() == 0){
-                                alarm(1);
-                                while(1){
-                                        pause();
-                                }
+                        int pid;
+
+                        pid = fork();
+                        switch(pid){
+                                case 0:
+                                        signal(SIGCHLD, SIG_DFL); //Usa o handler default
+                                        aux->pidfilhos = (int*) malloc((numComandos-1) * sizeof(int));
+                                        executar(comandos+1, numComandos-1, fd_log, aux->pidfilhos);
+                                        _exit(0);
+                                case -1:
+                                        perror("fork");
+                                        return -1;
+                                default:
+                                        aux->pid = pid;
+                                        printf("[DEBUG] pidExecucao: %d\n", aux->pid);
+                                        break;
                         }
 
-                        if(fork() == 0) executar(comandos+1, numComandos-1, fd_log);
+                        pid = fork();
+                        if(pid == 0){
+                                alarm(tempoExecucaoMax);
+                                pause();
+                                _exit(0);
+                        }
+                        else if (pid < 0){
+                                perror("fork");
+                                return -1;
+                        }
                         //wait(&status);
                 }
                 /*else if(strcmp(comandos[0], "-l") == 0) listar();
@@ -271,7 +306,8 @@ int main(int argc, char *argv[]) {
                 /*for(int i = 0; i < numComandos; i++) free(comandos[i]);*/
 
                 close(fd_leitura_canal);
+                close(fd_escrita_canal);
         }
 
-        exit(0);
+        return 0;
 }
