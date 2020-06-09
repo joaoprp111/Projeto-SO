@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 
-int main(int argc, char const *argv[]) {
+int main(int argc, char *argv[]) {
 
     int fd_escrita_canal;
 
@@ -13,12 +13,13 @@ int main(int argc, char const *argv[]) {
         perror("Abrir o fifo");
     }
 
-    int i;
-
-    for(i = 1; i < argc; i++){
-	write(fd_escrita_canal, argv[i], strlen(argv[i])+1);
-	write(fd_escrita_canal,"_", 1);
+    char str[512];
+    strcpy(str, argv[1]);
+    for(int i = 2; i < argc; i++){
+	    strcat(str, " "); strcat(str, argv[i]); 
     }
+
+    write(fd_escrita_canal, str, strlen(str)+1);
 
     close(fd_escrita_canal);
 

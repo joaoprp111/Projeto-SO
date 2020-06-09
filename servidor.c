@@ -19,15 +19,24 @@ int parsing(char *p, char*** array, int n){
         return n;
 }
 
-int main(int argc, char const *argv[]) {
+int copia(char buffer[], char bufferDest[], int i){
+        int j = 0;
+        while(buffer[j]){
+                bufferDest[i] = buffer[j];
+                i++;
+                j++;
+        }
+        bufferDest[i] = '\0';
+        return i;
+}
+
+int main(int argc, char *argv[]) {
 
 
         /*O servidor quando arranca já deve ter o fifo criado */
 
         /* Assumindo que o fifo está aberto, agora o servidor lê do fifo e faz parsing dos comandos*/
         /*char** tarefasExecucao = NULL;  Array que guarda as strings que representam tarefas em execução */
-        int numTarefasExecucao = 0;
-        char** array = NULL;
         int fd_leitura_canal = -1; /* Descritor de leitura do fifo */
 
         while((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) > 0){
@@ -37,13 +46,13 @@ int main(int argc, char const *argv[]) {
                 int bytesread = 0;
 		int k = 0;
 
-                while((bytesread = read(fd_leitura_canal, bufferLeitura, SIZE)) > 0){
-                        write(1, bufferLeitura, bytesread);
-			k++;
-                }
+                bytesread = read(fd_leitura_canal, bufferLeitura, SIZE);
 
-                printf("\n%s\n", bufferLeitura);
-		printf("%d\n",k);
+        	if(bytesread > 0) write(1, bufferLeitura, bytesread);
+
+                printf("\nBuffer: %s\n", bufferLeitura);
+
+		//printf("%d\n",k);
 		/*numTarefasExecucao = parsing(bufferLeitura,&array,numTarefasExecucao);
                 int i;
                 printf("Flag: %s\n", array[0]);
