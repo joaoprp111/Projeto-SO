@@ -20,7 +20,7 @@ int main (int argc, char* argv[]) {
     }
     char buffer[256];
     int bytesread;
-    bytesread = read(1,buffer,256);
+    bytesread = read(0,buffer,256);
     write(fd_escrita_canal,buffer,strlen(buffer) + 1);
     close(fd_escrita_canal);
     close(fd_leitura_canal);
