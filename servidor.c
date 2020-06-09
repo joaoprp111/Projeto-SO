@@ -5,8 +5,43 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #define SIZE 512
+
+int tempoExecucaoMax = 10; // em segundos
+int tempoExecucao = -1;
+ 
+void swap(char a, char b){
+        char aux = b;
+        b = a;
+        a = aux;
+}
+
+char* itoa(int num, char* str){ 
+    int i = 0;  
+  
+    // Process individual digits 
+    while (num != 0){ 
+        int rem = num % 10; 
+        str[i++] = (rem > 9)? (rem-10) + 'a' : rem + '0'; 
+        num = num/10; 
+    } 
+  
+    str[i] = '\0';
+
+    int start = 0; 
+    int end = i -1; 
+    while (start < end){ 
+        char aux = str[start];
+        str[start] = str[end];
+        str[end] = aux;
+        start++; 
+        end--; 
+    }  
+  
+    return str; 
+} 
 
 int existePipe(char* token){
         int res = 0, i = 0;
@@ -45,6 +80,7 @@ int executar(char** comandos, int numComandos, int fd_log){
         int i, pid;
         int status[numComandos];
         int p[numComandos-1][2];
+        sleep(30);
 
         for(i = 0; i < numComandos; i++){
                 //Primeiro comando
@@ -161,21 +197,30 @@ char** parsing(char* bufferLeitura, int *numComandos){
         return comandos;
 }
 
+void sig_alrm_handler(int signum){
+    tempoExecucao++;
+    if(tempoExecucao == tempoExecucaoMax) printf("\nATINGIU LIMITE DE EXECUÇÃO\n");
+    alarm(1);
+}
+
 int main(int argc, char *argv[]) {
 
+
+        signal(SIGALRM, sig_alrm_handler);
 
         /*O servidor quando arranca já deve ter o fifo criado */
 
         /* Assumindo que o fifo está aberto, agora o servidor lê do fifo e faz parsing dos comandos*/
-        /*char** tarefasExecucao = NULL;  Array que guarda as strings que representam tarefas em execução */
-        int fd_leitura_canal = -1; /* Descritor de leitura do fifo */
+        char** tarefasExecucao = NULL; /* Array que guarda as strings que representam tarefas em execução */
+        int numExecucao = 0;
+        int fd_leitura_canal = -1, fd_escrita_canal = -1; /* Descritor de leitura do fifo */
         int fd_log = open("log.txt", O_CREAT | O_RDWR | O_TRUNC, 0660);
         if(fd_log < 0){
                 perror("log");
                 return -1;
         }
 
-        while((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) > 0){
+        while(((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) > 0) && ((fd_escrita_canal = open("canalServidorCliente", O_WRONLY)) > 0)){
 
                 char bufferLeitura[SIZE];
                 char** comandos = NULL;
@@ -184,13 +229,34 @@ int main(int argc, char *argv[]) {
 
                 bytesread = read(fd_leitura_canal, bufferLeitura, SIZE);
 
-        	if(bytesread > 0) write(1, bufferLeitura, bytesread);
+        	//if(bytesread > 0) write(1, bufferLeitura, bytesread);
 
                 comandos = parsing(bufferLeitura, &numComandos);
 
-                for(int i = 0; i < numComandos; i++) printf("comandos[%d]: %s\n", i, comandos[i]);
+                //for(int i = 0; i < numComandos; i++) printf("comandos[%d]: %s\n", i, comandos[i]);
 
-                if(strcmp(comandos[0],"-e") == 0) executar(comandos+1, numComandos-1, fd_log);
+                if(strcmp(comandos[0],"-e") == 0){
+                        tempoExecucao = 0;
+                        tarefasExecucao = (char**) realloc(tarefasExecucao, (numExecucao+1)*sizeof(char*));
+                        tarefasExecucao[numExecucao++] = strdup(bufferLeitura+3); /* Para remover a flag e o espaço */
+                        
+                        char* n;
+                        n = itoa(numExecucao, n);
+                        char output[14] = "nova tarefa #";
+                        strcat(output, n);
+                        strcat(output, "\n");
+                        write(fd_escrita_canal, output, strlen(output)+1);
+
+                        if(fork() == 0){
+                                alarm(1);
+                                while(1){
+                                        pause();
+                                }
+                        }
+
+                        if(fork() == 0) executar(comandos+1, numComandos-1, fd_log);
+                        //wait(&status);
+                }
                 /*else if(strcmp(comandos[0], "-l") == 0) listar();
                 else if(strcmp(comandos[0], "-i") == 0) alterarTempoInatividade();
                 else if(strcmp(comandos[0], "-m") == 0) alterarTempoMaxExec();

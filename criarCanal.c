@@ -10,8 +10,13 @@ int main(int argc, char const *argv[]) {
 		perror("Criar fifo");
 		exit(-1);
 	}
+
+	if(mkfifo("canalServidorCliente", 0666) == -1){
+		perror("Criar fifo");
+		exit(-1);
+	}
 	
-	char* mensagem = "Canal criado com sucesso!\n";
+	char* mensagem = "Canais criados com sucesso!\n";
 	write(1, mensagem, strlen(mensagem)+1);
 
 	exit(0);
