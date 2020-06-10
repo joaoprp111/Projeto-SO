@@ -6,8 +6,8 @@
 #include <stdlib.h>
 
 int main(int argc, char *argv[]) {
-    if (arg == 1){
-
+    if (argc == 1){
+	//chamar o argus
     }
     else {
         int fd_escrita_canal, fd_leitura_canal;
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 
         close(fd_escrita_canal);
         close(fd_leitura_canal);
-
+    }
     return 0;
 }
 

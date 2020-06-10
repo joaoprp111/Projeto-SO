@@ -1,0 +1,14 @@
+total 180
+-rw-r--r-- 1 joaopereira joaopereira   672 jun 10 00:38 argus.c
+prw-r--r-- 1 joaopereira joaopereira     0 jun 10 17:23 canalClienteServidor
+prw-r--r-- 1 joaopereira joaopereira     0 jun 10 17:23 canalServidorCliente
+-rwxr-xr-x 1 joaopereira joaopereira  8656 jun 10 17:14 clientes
+-rw-r--r-- 1 joaopereira joaopereira   997 jun 10 17:14 clientes.c
+-rwxr-xr-x 1 joaopereira joaopereira  8480 jun  9 18:29 criar
+-rwxr-xr-x 1 joaopereira joaopereira  8480 jun  5 15:51 criarCanal
+-rw-r--r-- 1 joaopereira joaopereira   428 jun  9 20:07 criarCanal.c
+-rw-rw-r-- 1 joaopereira joaopereira 88484 jun  9 16:12 enunciado(1).pdf
+-rw-r--r-- 1 joaopereira joaopereira     0 jun 10 17:23 log.txt
+-rwxr-xr-x 1 joaopereira joaopereira 23448 jun 10 17:22 servidor
+-rw-r--r-- 1 joaopereira joaopereira 12584 jun 10 17:22 servidor.c
+-rw-r--r-- 1 joaopereira joaopereira    27 jun  9 15:52 testes.txt
