@@ -86,27 +86,35 @@ int exec_command(char* comandos, int n){
         return exec_ret;
 }
 
-void listarTarefasExecucao(int fd_escrita_canal){
+/*void listarTarefasExecucao(int fd){
         int i = 0;
         int existeTExec = 0;
+        char outputfinal[numTarefas * 25];
         for(i = 0; i < numTarefas; i++){
                 if(tarefas[i]->terminada == 0){
                         existeTExec = 1;
                         char* n = NULL;
                         n = itoa(i+1, n);
-                        char output[50] = "#";
+                        char output[1 + strlen(n) + 2 + strlen(tarefas[i]->comando) + 1 + 1];
+                        strcpy(output, "#");
                         strcat(output, n);
                         strcat(output, ": ");
                         strcat(output, tarefas[i]->comando);
                         strcat(output, "\n");
-                        write(fd_escrita_canal, output, 1 + strlen(n) + 2 + strlen(tarefas[i]->comando) + 1 + 1);
+                        strcat(outputfinal, output);
+                        free(n);
                 }
         }
         if(!existeTExec){
-                char* out = "Não há tarefas em execução!\n";
-                write(fd_escrita_canal, out, strlen(out)+1);
+                char* aux = "Não há tarefas em execução!\n";
+                char* output2; output2 = strdup(aux);
+                write(fd, output2, strlen(output2)+1);
+                free(output2);
         }
-}
+        else{
+                write(fd, outputfinal, strlen(outputfinal)+1);
+        }
+}*/
 
 int executar(char** comandos, int numComandos, int fd_log, int pos){
         int i, pid;
@@ -259,6 +267,16 @@ void sig_alrm_handler(int signum){
     //for(int i = 0; i < numTarefas; i++) printf("Estado de terminação: %d\n", tarefas[i]->terminada);
 }
 
+void sig_int_handler(int signum){
+        int i;
+        for(i = 0; i < numTarefas; i++){
+                free(tarefas[i]->comando);
+                free(tarefas[i]);
+        }
+        free(tarefas);
+        exit(0);
+}
+
 void sig_chld_handler(int signum){
         wait(NULL);
 }
@@ -268,6 +286,7 @@ int main(int argc, char *argv[]) {
 
         signal(SIGALRM, sig_alrm_handler);
         signal(SIGCHLD, sig_chld_handler);
+        signal(SIGINT, sig_int_handler);
 
         /*O servidor quando arranca já deve ter o fifo criado */
 
@@ -279,7 +298,17 @@ int main(int argc, char *argv[]) {
                 return -1;
         }
 
-        while(((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) > 0) && ((fd_escrita_canal = open("canalServidorCliente", O_WRONLY)) > 0)){
+        while(1){
+
+                if((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) < 0){
+                        perror("open");
+                        return -1;
+                }
+
+                if((fd_escrita_canal = open("canalServidorCliente", O_WRONLY)) < 0){
+                        perror("open");
+                        return -1;
+                }
 
                 char bufferLeitura[SIZE];
                 char** comandos = NULL;
@@ -290,7 +319,9 @@ int main(int argc, char *argv[]) {
 
         	//if(bytesread > 0) write(1, bufferLeitura, bytesread);
 
-                comandos = parsing(bufferLeitura, &numComandos);
+                char* copia = strdup(bufferLeitura);
+                comandos = parsing(copia, &numComandos);
+                free(copia);
 
                 //for(int i = 0; i < numComandos; i++) printf("comandos[%d]: %s\n", i, comandos[i]);
 
@@ -304,7 +335,7 @@ int main(int argc, char *argv[]) {
 
                         char* n = NULL;
                         n = itoa(numTarefas+1, n);
-                        char output[14] = "nova tarefa #";
+                        char output[25]; strcpy(output, "nova tarefa #");
                         strcat(output, n);
                         strcat(output, "\n");
                         write(fd_escrita_canal, output, strlen(output)+1);
@@ -325,7 +356,7 @@ int main(int argc, char *argv[]) {
                                         //printf("[DEBUG] pidExecucao: %d\n", tarefas[numTarefas]->pid);
                                         break;
                         }
-
+                        
                         numTarefas++;
 
                         pid = fork();
@@ -340,8 +371,9 @@ int main(int argc, char *argv[]) {
                         }
                         //wait(&status);
                 }
-                else if(strcmp(comandos[0], "-l") == 0) listarTarefasExecucao(fd_escrita_canal);
-                /*else if(strcmp(comandos[0], "-i") == 0) alterarTempoInatividade();
+                /* if(strcmp(comandos[0], "-l") == 0)
+                        listarTarefasExecucao(fd_escrita_canal);
+                else if(strcmp(comandos[0], "-i") == 0) alterarTempoInatividade();
                 else if(strcmp(comandos[0], "-m") == 0) alterarTempoMaxExec();
                 else if(strcmp(comandos[0], "-t") == 0) terminarTarefa();
                 else if(strcmp(comandos[0], "-r") == 0) tarefasTerminadas();
