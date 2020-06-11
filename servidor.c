@@ -18,7 +18,7 @@ typedef struct tarefa{
 } *Tarefa;
 
 Tarefa *tarefas = NULL;
-int tempoExecucaoMax = 5; // em segundos
+int tempoExecucaoMax = 7; // em segundos
 int numTarefas = 0;
 
 char* itoa(int num, char *str){ 
@@ -83,13 +83,14 @@ int exec_command(char* comandos, int n){
 void listarTarefasExecucao(int fd_escrita_canal, int num){
         int i = 0;
         int existeTExec = 0;
-        char outputfinal[num * 40];
+        char* outputfinal;
         for(i = 0; i < num; i++){
+                printf("estado: %d\n", tarefas[i]->terminada);
                 if(tarefas[i]->terminada == 0){
                         existeTExec = 1;
                         char* n = NULL;
                         n = itoa(i+1, n);
-                        char output[50] = "#";
+                        char* output = strdup("#");
                         strcat(output, n);
                         strcat(output, ": ");
                         strcat(output, tarefas[i]->comando);
@@ -110,7 +111,7 @@ int executar(char** comandos, int numComandos, int fd_log, int pos){
         int p[numComandos-1][2];
         tarefas[pos]->pidfilhos = (int*) malloc(numComandos * sizeof(int));
         tarefas[pos]->nFilhos = numComandos;
-        sleep(30);
+        sleep(10);
 
         for(i = 0; i < numComandos; i++){
                 //Primeiro comando
@@ -185,7 +186,9 @@ int executar(char** comandos, int numComandos, int fd_log, int pos){
                 wait(&status[i]);
         }
 
-        tarefas[pos]->terminada = 1;
+        for(i = 0; i < numComandos; i++)
+                if(WEXITSTATUS(status[i]) == -1) return -1;
+
         printf("\n[DEBUG] Terminou com sucesso!\n");
 
         return 0;
@@ -237,9 +240,14 @@ char** parsing(char* bufferLeitura, int *numComandos){
 }
 
 void matarProcessos(){
-        int i;
-        for(i = 0; i < numTarefas; i++){
+        int i, flag = 0;
+        printf("num tarefas: %d\n", numTarefas);
+        for(i = 0; i < numTarefas && !flag; i++){
                 if((tarefas[i]->terminada) == 0){
+                        printf("dentro do if\n");
+                        printf("pid %d: %d\n", i, tarefas[i]->pid);
+                        flag = 1;
+                        printf("estado tarefa: %d\n", tarefas[0]->terminada);
                         //matar os processos
                         //marcar o campo terminada com 2 (significa que foi terminada por um kill)
                         kill(tarefas[i]->pid, SIGKILL);
@@ -250,14 +258,17 @@ void matarProcessos(){
 }
 
 void sig_alrm_handler(int signum){
-    //printf("\n[DEBUG] ATINGIU LIMITE DE EXECUÇÃO\n");
+    printf("\n[DEBUG] ATINGIU LIMITE DE EXECUÇÃO\n");
     matarProcessos();
-    //printf("\n[DEBUG] Terminou com kill!\n");
-    //for(int i = 0; i < numTarefas; i++) printf("Estado de terminação: %d\n", tarefas[i]->terminada);
+    printf("\n[DEBUG] Terminou com kill!\n");
+    for(int i = 0; i < numTarefas; i++) printf("Estado de terminação: %d\n", tarefas[i]->terminada);
 }
 
 void sig_chld_handler(int signum){
-        wait(NULL);
+        int status;
+        wait(&status);
+        if(WIFEXITED(status)) tarefas[numTarefas-1]->terminada = 1;
+        else tarefas[numTarefas-1]->terminada = -1;
 }
 
 void sig_int_handler(int signum){
@@ -292,7 +303,7 @@ int main(int argc, char *argv[]) {
                 return -1;
         }
 
-        while(((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) > 0) && ((fd_escrita_canal = open("canalServidorCliente", O_WRONLY)) > 0)){
+        while(((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) >= 0) && ((fd_escrita_canal = open("canalServidorCliente", O_WRONLY)) >= 0)){
 
                 char bufferLeitura[SIZE];
                 char** comandos = NULL;
@@ -331,31 +342,30 @@ int main(int argc, char *argv[]) {
                         pid = fork();
                         switch(pid){
                                 case 0:
-                                        //signal(SIGCHLD, SIG_DFL); Usa o handler default
-                                        executar(comandos+1, numComandos-1, fd_log, numTarefas-1);
-                                        _exit(0);
+                                        signal(SIGCHLD, SIG_DFL); //Usa o handler default
+                                        if(!executar(comandos+1, numComandos-1, fd_log, numTarefas-1)) _exit(1);
+                                        else _exit(-1);
                                 case -1:
                                         perror("fork");
                                         return -1;
                                 default:
                                         tarefas[numTarefas-1]->pid = pid;
-                                        //printf("[DEBUG] pidExecucao: %d\n", tarefas[numTarefas]->pid);
+                                        printf("[DEBUG] pidExecucao: %d\n", tarefas[numTarefas-1]->pid);
                                         break;
                         }
 
-                        pid = fork();
-                        if(pid == 0){
+                        if((pid = fork()) == 0){
+                                signal(SIGCHLD, SIG_DFL);
                                 alarm(tempoExecucaoMax);
                                 pause();
                                 _exit(0);
                         }
-                        else if (pid < 0){
-                                perror("fork");
-                                return -1;
-                        }
                         //wait(&status);
                 }
-                else if(strcmp(comandos[0], "-l") == 0) listarTarefasExecucao(fd_escrita_canal, numTarefas);
+                else if(strcmp(comandos[0], "-l") == 0){
+                        printf("listar\n");
+                        listarTarefasExecucao(fd_escrita_canal, numTarefas);
+                }
                 /*else if(strcmp(comandos[0], "-i") == 0) alterarTempoInatividade();
                 else if(strcmp(comandos[0], "-m") == 0) alterarTempoMaxExec();
                 else if(strcmp(comandos[0], "-t") == 0) terminarTarefa();
