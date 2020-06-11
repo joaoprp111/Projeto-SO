@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[]) {
     if (argc == 1){
-	//chamar o argus
+    //chamar o argus
     }
     else {
         int fd_escrita_canal, fd_leitura_canal;
@@ -25,12 +25,12 @@ int main(int argc, char *argv[]) {
         char str[512];
         strcpy(str, argv[1]);
         for(int i = 2; i < argc; i++){
-	      strcat(str, " "); strcat(str, argv[i]); 
+          strcat(str, " "); strcat(str, argv[i]); 
         }
 
         write(fd_escrita_canal, str, strlen(str)+1);
 
-        char buffer[256];
+        char buffer[512];
         int bytesread = read(fd_leitura_canal, buffer, 256);
         if(bytesread > 0) write(1, buffer, bytesread);
 
