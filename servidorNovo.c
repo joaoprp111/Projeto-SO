@@ -20,10 +20,11 @@ typedef struct tarefa{
 } *Tarefa;
 
 Tarefa *tarefas = NULL;
-int tempoExecucaoMax = 5; // em segundos
-int tempoInatividade = 2;
+int tempoExecucaoMax = 100; // em segundos
+int tempoInatividadeMax = 100;
 int numTarefas = 0;
 int returnStatus = -1;
+int pidInatividade;
 
 char* itoa(int num, char *str){ 
     int i = 0;  
@@ -142,9 +143,19 @@ void matarProcessos(){
 }
 
 void sig_alrm_handler(int signum){
-    printf("\n[DEBUG] ATINGIU LIMITE DE EXECUÇÃO\n");
-    printf("Pid: %d\n", getpid());
-    returnStatus = 2;
+    printf("\n[DEBUG] ATINGIU LIMITE DE EXECUÇÃO OU INATIVIDADE\n");
+    int pidRecetorAlarme = getpid();
+    int j, encontrado = 0;
+    if(pidRecetorAlarme == pidInatividade) encontrado = 1;
+
+    if(!encontrado){
+        printf("Execução\n");
+        returnStatus = 2;
+    }
+    else{
+        printf("Inatividade\n");
+        returnStatus = 4;
+    }
     matarProcessos();
     /*printf("\n[DEBUG] Terminou com kill!\n");
     for(int i = 0; i < numTarefas; i++) printf("Estado de terminação: %d\n", tarefas[i]->terminada);*/
@@ -153,11 +164,6 @@ void sig_alrm_handler(int signum){
 void sig_usr1_handler(int signum){
         returnStatus = 3;
         if(signum == SIGUSR1) matarProcessos();
-}
-
-void sig_usr2_handler(int signum){
-        returnStatus = 4;
-        if(signum == SIGUSR2) matarProcessos();
 }
 
 void sig_term_handler(int signum){
@@ -169,20 +175,24 @@ int executar(char** comandos, int numComandos, int fd_log){
         signal(SIGCHLD, SIG_DFL);
         signal(SIGALRM, sig_alrm_handler);
         signal(SIGUSR1, sig_usr1_handler);
-        signal(SIGUSR2, sig_usr2_handler);
-        int i, pid, pd;
+        char buffer[256];
+        int i, pid, bytes, j = 0;
         int status[numComandos];
         int p[numComandos-1][2];
-        tarefas[numTarefas]->pidfilhos = (int*) malloc(numComandos * 2 * sizeof(int));
+        int p2[numComandos-1][2];
+        tarefas[numTarefas]->pidfilhos = (int*) malloc(((numComandos * 2)-1) * sizeof(int));
         assert(numTarefas+1 > 0);
 
         alarm(tempoExecucaoMax);
-        int j = 0;
 
         for(i = 0; i < numComandos; i++){
                 //Primeiro comando
                 if(i == 0){
                         if(pipe(p[i]) == -1){
+                                perror("pipe");
+                                return -1;
+                        }
+                        if(pipe(p2[i]) == -1){
                                 perror("pipe");
                                 return -1;
                         }
@@ -196,20 +206,36 @@ int executar(char** comandos, int numComandos, int fd_log){
                                         close(p[i][1]);
                                         exec_command(comandos[i], numComandos);
                                         _exit(-1);
-                                default:                                		
-                               			if (pd = fork() == 0){
-                               				alarm(tempoInatividade);
-                               				_exit(0);
-                               			}
-                               			else {
-                                        	close(p[i][1]);
-                                        	tarefas[numTarefas]->nFilhos += 2;
-                                        	(tarefas[numTarefas]->pidfilhos)[j] = pid;
-                                        	j++;
-                                        	(tarefas[numTarefas]->pidfilhos)[j] = pd;
-                                        	j++;
-                                    	}
+                                default:
+                                        close(p[i][1]);
+                                        tarefas[numTarefas]->nFilhos += 1;
+                                        (tarefas[numTarefas]->pidfilhos)[j++] = pid;
                         }
+
+                        switch(pid = fork()){
+                                case -1:
+                                        perror("fork");
+                                        return -1;
+                                case 0:
+                                        pidInatividade = getpid();
+                                        alarm(tempoInatividadeMax);
+                                        dup2(p[i][0], 0); //ta a ler do p[i]
+                                        close(p[i][0]); 
+                                        close(p2[i][0]);
+                                        dup2(p2[i][1], 1); // ta a escrever pro p2[i]
+                                        close(p2[i][1]);
+                                        while((bytes = read(0, buffer, 256)) > 0){
+                                            alarm(0);
+                                            write(1, buffer, bytes);
+                                        }
+                                        _exit(0);
+                                default:
+                                        close(p2[i][1]);
+                                        close(p[i][0]);
+                                        tarefas[numTarefas]->nFilhos += 1;
+                                        (tarefas[numTarefas]->pidfilhos)[j++] = pid;
+                        }
+
                 }
                 //Ultimo comando
                 else if(i == numComandos-1){
@@ -218,24 +244,16 @@ int executar(char** comandos, int numComandos, int fd_log){
                                         perror("fork");
                                         return (-1);
                                 case 0:
-                                        dup2(p[i-1][0], 0);
-                                        close(p[i-1][0]);
+                                        dup2(p2[i-1][0], 0);
+                                        close(p2[i-1][0]);
+
                                         dup2(fd_log, 1);
                                         exec_command(comandos[i], numComandos);
                                         _exit(-1);
                                 default:
-                                		if (pd = fork() == 0){
-                               				alarm(0);
-                               				_exit(0);
-                               			}
-                               			else {
-                                        	close(p[i-1][0]);
-                                        	tarefas[numTarefas]->nFilhos += 2;
-                                        	(tarefas[numTarefas]->pidfilhos)[j] = pid;
-                                        	j++;
-                                        	(tarefas[numTarefas]->pidfilhos)[j] = pd;
-                                        	j++;
-                                    	}
+                                        close(p2[i-1][0]);
+                                        tarefas[numTarefas]->nFilhos += 1;
+                                        (tarefas[numTarefas]->pidfilhos)[j++] = pid;
                         }
                 }
                 //Comandos intermedios
@@ -244,41 +262,62 @@ int executar(char** comandos, int numComandos, int fd_log){
                                 perror("pipe");
                                 return (-1);
                         }
+                        if(pipe(p2[i]) == -1){
+                                perror("pipe");
+                                return -1;
+                        }
                         switch(pid = fork()){
                                 case -1:
                                         perror("fork");
                                         return (-1);
                                 case 0:
+                                        dup2(p2[i-1][0], 0);
+                                        close(p2[i-1][0]);
+
                                         close(p[i][0]);
                                         dup2(p[i][1], 1);
                                         close(p[i][1]);
 
-                                        dup2(p[i-1][0], 0);
-                                        close(p[i-1][0]);
-
                                         exec_command(comandos[i], numComandos);
                                         _exit(-1);
                                 default:
-                                		if (pd = fork() == 0){
-                               				alarm(alarm(0));
-                               				_exit(0);
-                               			}
-                               			else {
-                                        	close(p[i-1][0]);
-                                        	tarefas[numTarefas]->nFilhos += 2;
-                                        	(tarefas[numTarefas]->pidfilhos)[j] = pid;
-                                        	j++;
-                                        	(tarefas[numTarefas]->pidfilhos)[j] = pd;
-                                        	j++;
+                                        close(p[i][1]);
+                                        close(p2[i-1][0]);
+                                        tarefas[numTarefas]->nFilhos += 1;
+                                        (tarefas[numTarefas]->pidfilhos)[j++] = pid;
+                        }
+
+                        switch(pid = fork()){
+                                case -1:
+                                        perror("fork");
+                                        return (-1);
+                                case 0:
+                                        pidInatividade = getpid();
+                                        alarm(tempoInatividadeMax);
+                                        dup2(p[i][0], 0);
+                                        close(p[i][0]);
+
+                                        dup2(p2[i][1], 1);
+                                        close(p2[i][1]);
+                                        close(p2[i][0]);
+
+                                        while((bytes = read(0, buffer, 256)) > 0){
+                                            alarm(0);
+                                            write(1, buffer, bytes);
                                         }
+                                        _exit(0);
+                                default:
+                                        tarefas[numTarefas]->nFilhos += 1;
+                                        (tarefas[numTarefas]->pidfilhos)[j++] = pid;
                         }
                 }
         }
 
         //printf("\n[DEBUG] Terminou com sucesso!\n");
 
+        //assert(numComandos == tarefas[numTarefas]->nFilhos);
 
-        for(i = 0; i < tarefas[numTarefas]->nFilhos; i++){
+        for(i = 0; i < (numComandos*2) - 1; i++){
                 //printf("Num comandos: %d\n", numComandos);
                 //printf("Num filhos: %d\n", tarefas[numTarefas]->nFilhos);
                 //printf("Filho %d: %d\n", i, (tarefas[pos]->pidfilhos)[i]);
@@ -288,10 +327,11 @@ int executar(char** comandos, int numComandos, int fd_log){
 
         alarm(0);
 
-        for(i = 0; i < numComandos; i++){
+        for(i = 0; i < (numComandos*2) - 1; i++){
                 if(WEXITSTATUS(status[i]) == 2) return 2;
-                else if (WEXITSTATUS(status[i]) == 4) return 4;
-                else if(WEXITSTATUS(status[i]) == 255) return -1;
+                else if(WEXITSTATUS(status[i]) == 3) return 3;
+                else if(WEXITSTATUS(status[i]) == 4) return 4;
+                else if (WEXITSTATUS(status[i] == 255)) return -1;
         }
 
         assert(tarefas[numTarefas]->nFilhos > 0);
@@ -345,6 +385,37 @@ char** parsing(char* bufferLeitura, int *numComandos){
         }
 
         return comandos;
+}
+
+void tarefasTerminadas(){
+    int i, fd = open("canalServidorCliente", O_WRONLY), count = 0;
+    for(i = 0; i < numTarefas; i++){
+        if(tarefas[i]->estado > 0){
+            count++;
+            write(fd, "#", strlen("#"));
+            char* n = NULL;
+            n = itoa(i+1, n);
+            write(fd, n, strlen(n)); write(fd, ", ", strlen(", "));
+            if(tarefas[i]->estado == 1) write(fd, "concluida: ", strlen("concluida: "));
+            else if(tarefas[i]->estado == 2) write(fd, "max execução: ", strlen("max execução: "));
+            else if(tarefas[i]->estado == 3) write(fd, "terminada pelo utilizador: ", strlen("terminada pelo utilizador: "));
+            else if(tarefas[i]->estado == 4) write(fd, "max inactividade: ", strlen("max inactividade: "));
+            write(fd, tarefas[i]->comando, strlen(tarefas[i]->comando));
+            write(fd, "\n", 1);
+        }
+    }
+    if(count == 0) write(fd, "Ainda não há tarefas terminadas!\n", strlen("Ainda não há tarefas terminadas!\n"));
+    close(fd);
+}
+
+void alterarTempoInatividade(int tempo){
+        int fd = open("canalServidorCliente", O_WRONLY);
+
+        tempoInatividadeMax = tempo;
+        char* str = "Tempo de inatividade entre pipes anónimos alterado com sucesso!\n";
+        write(fd, str, strlen(str)+1);
+
+        close(fd);
 }
 
 void alterarTempoMaxExec(int tempo){
@@ -456,17 +527,21 @@ int main(int argc, char *argv[]) {
                                 int ret = 0;
                                 ret = executar(comandos+1, numComandos-1, fd_log);
                                 if(!ret) _exit(1); //terminou com sucesso
+                                else if(ret == 2) _exit(2);
+                                else if(ret == 3) _exit(3);
+                                else if(ret == 4) _exit(4);
+                                else _exit(-1);
                         }
 
                         tarefas[numTarefas]->pid = pid;
                         numTarefas++;
                 }
-                else if(strcmp(comandos[0], "-l") == 0 || strcmp(comandos[0], "listar") == 0) listarTarefasExecucao(numTarefas);
-                else if(strcmp(comandos[0], "-m") == 0 || strcmp(comandos[0], "tempo-execucao") == 0) alterarTempoMaxExec(atoi(comandos[1]));
+                else if(strcmp(comandos[0], "-l") == 0) listarTarefasExecucao(numTarefas);
+                else if(strcmp(comandos[0], "-m") == 0) alterarTempoMaxExec(atoi(comandos[1]));
                 else if(strcmp(comandos[0], "-t") == 0) terminarTarefa(atoi(comandos[1])-1);
-                /*else if(strcmp(comandos[0], "-i") == 0) alterarTempoInatividade();
+                else if(strcmp(comandos[0], "-i") == 0) alterarTempoInatividade(atoi(comandos[1]));
                 else if(strcmp(comandos[0], "-r") == 0) tarefasTerminadas();
-                else if(strcmp(comandos[0], "-h") == 0) ajuda();
+                /*else if(strcmp(comandos[0], "-h") == 0) ajuda();
                 else{
                         char* mensagem = "Flag inválida!\n";
                         write(1, mensagem, strlen(mensagem)+1);
