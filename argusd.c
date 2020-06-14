@@ -76,6 +76,9 @@ int existePipe(char* token){
         return res;
 }
 
+/**
+ * Execução de um comando
+ */
 int exec_command(char* comandos, int n){
 
         char* args[n];
@@ -98,6 +101,9 @@ int exec_command(char* comandos, int n){
         return exec_ret;
 }
 
+/**
+ * Terminar a tarefa que está na posição pos do array (exemplo: tarefa 1 -> pos 0)
+ */
 void terminarTarefa(int pos){
         int fd = open("canalServidorCliente", O_WRONLY);
 
@@ -115,6 +121,7 @@ void terminarTarefa(int pos){
 
         close(fd);
 }
+
 
 void listarTarefasExecucao(int num){
 
@@ -508,7 +515,7 @@ void sig_int_handler(int signum){
         free(tarefas);
         write(1, "Servidor terminado!\n", strlen("Servidor terminado!\n")+1);
         close(fd_log);
-        close(fd_log_idx);
+        //close(fd_log_idx);
         exit(0);
 }
 
@@ -551,11 +558,11 @@ int main(int argc, char *argv[]) {
                 return -1;
         }
 
-        fd_log_idx = open("log.idx", O_CREAT | O_RDWR | O_TRUNC, 0660);
+        /*fd_log_idx = open("log.idx", O_CREAT | O_RDWR | O_TRUNC, 0660);
         if(fd_log_idx < 0){
                 perror("log");
                 return -1;
-        }
+        }*/
 
         if(signal(SIGINT, sig_int_handler) == SIG_ERR){
             perror("signal");
