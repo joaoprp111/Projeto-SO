@@ -14,11 +14,16 @@ int main(int argc, char *argv[]) {
             char buffer[256];
             int bytesread;
             bytesread = read(0,buffer,256);
+            char* copia = strdup(buffer);
+            printf("%d\n",bytesread);
+            printf("buffer: %s\n",buffer);
+            printf("copia: %s\n",copia);
             if ((fd_escrita_canal = open("canalClienteServidor", O_WRONLY)) == -1) {
                 perror("Abrir o fifo");
                 return -1;
             }
-            write(fd_escrita_canal,buffer,strlen(buffer) + 1);
+            write(fd_escrita_canal,copia,bytesread-1);
+            free(copia);
             close(fd_escrita_canal);
 
             char buffer2[512];
@@ -26,7 +31,12 @@ int main(int argc, char *argv[]) {
                 perror("Abrir o fifo");
                 return -1;
             }
-            while((bytesread = read(fd_leitura_canal, buffer2, 512)) > 0) write(1, buffer2, bytesread);
+            char* copia2;
+            while((bytesread = read(fd_leitura_canal, buffer2, 512)) > 0){ 
+                copia2 = strdup(buffer2);
+                write(1, copia2, bytesread);
+            }
+            free(copia2);
             close(fd_leitura_canal);
 
         }

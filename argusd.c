@@ -468,12 +468,12 @@ void sig_pipe_handler(int signum){
 
 void ajuda (){
 	int fd = open("canalServidorCliente", O_WRONLY);
-	write(fd, "tempo-inactividade segs", strlen("tempo-inactividade segs"));
-	write(fd, "tempo-execucao segs", strlen("tempo-execucao segs"));
-	write(fd, "executar p1 | p2 ... | pn", strlen("executar p1 | p2 ... | pn"));
-	write(fd, "listar", strlen("listar"));
-	write(fd, "terminar n", strlen("terminar n"));
-	write(fd, "historico", strlen("historico"));
+	write(fd, "tempo-inactividade segs\n", strlen("tempo-inactividade segs\n"));
+	write(fd, "tempo-execucao segs\n", strlen("tempo-execucao segs\n"));
+	write(fd, "executar p1 | p2 ... | pn\n", strlen("executar p1 | p2 ... | pn\n"));
+	write(fd, "listar\n", strlen("listar\n"));
+	write(fd, "terminar n\n", strlen("terminar n\n"));
+	write(fd, "historico\n", strlen("historico\n"));
 	close(fd);
 }
 	
@@ -507,10 +507,9 @@ int main(int argc, char *argv[]) {
                 char* copia = strdup(bufferLeitura);
                 comandos = parsing(copia, &numComandos);
                 free(copia);
-
+                printf("%s\n",comandos[0]);
                 //for(int i = 0; i < numComandos; i++) printf("comandos[%d]: %s\n", i, comandos[i]);
-
-                if(strcmp(comandos[0],"-e") == 0 || strcmp(comandos[0], "executar") == 0){
+                if((strcmp(comandos[0],"-e") == 0) || (strcmp(comandos[0], "executar") == 0)){
 
                         tarefas = (Tarefa*) realloc(tarefas, (numTarefas+1)*sizeof(Tarefa));
                         tarefas[numTarefas] = (Tarefa) malloc(sizeof(struct tarefa));
@@ -548,12 +547,12 @@ int main(int argc, char *argv[]) {
                         tarefas[numTarefas]->pid = pid;
                         numTarefas++;
                 }
-                else if(strcmp(comandos[0], "-l") == 0 || strcmp(comandos[0], "listar") == 0) listarTarefasExecucao(numTarefas);
-                else if(strcmp(comandos[0], "-m") == 0 || strcmp(comandos[0], "tempo-execucao") == 0) alterarTempoMaxExec(atoi(comandos[1]));
-                else if(strcmp(comandos[0], "-t") == 0 || strcmp(comandos[0], "terminar") == 0) terminarTarefa(atoi(comandos[1])-1);
-                else if(strcmp(comandos[0], "-i") == 0 || strcmp(comandos[0], "tempo-inatividade") == 0) alterarTempoInatividade(atoi(comandos[1]));
-                else if(strcmp(comandos[0], "-r") == 0 || strcmp(comandos[0], "historico") == 0) tarefasTerminadas();
-                else if(strcmp(comandos[0], "-h") == 0 || strcmp(comandos[0], "ajuda") == 0) ajuda();
+                else if((strcmp(comandos[0], "-l") == 0 )|| (strcmp(comandos[0], "listar") == 0)) listarTarefasExecucao(numTarefas);
+                else if((strcmp(comandos[0], "-m") == 0 )|| (strcmp(comandos[0], "tempo-execucao") == 0)) alterarTempoMaxExec(atoi(comandos[1]));
+                else if((strcmp(comandos[0], "-t") == 0 )|| (strcmp(comandos[0], "terminar") == 0)) terminarTarefa(atoi(comandos[1])-1);
+                else if((strcmp(comandos[0], "-i") == 0 )|| (strcmp(comandos[0], "tempo-inatividade") == 0)) alterarTempoInatividade(atoi(comandos[1]));
+                else if((strcmp(comandos[0], "-r") == 0 )|| (strcmp(comandos[0], "historico") == 0)) tarefasTerminadas();
+                else if((strcmp(comandos[0], "-h") == 0 )|| (strcmp(comandos[0], "ajuda") == 0)) ajuda();
                 else{
                         char* mensagem = "Flag inválida!\n";
                         write(1, mensagem, strlen(mensagem)+1);
