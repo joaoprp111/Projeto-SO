@@ -3,10 +3,10 @@ all: argus.o argusd.o
 	mkfifo canalServidorCliente
 
 argus.o: argus.c argus.h
-	gcc -o argus argus.c
+	gcc -g -o argus argus.c
 
 argusd.o: argusd.c argus.h
-	gcc -o argusd argusd.c
+	gcc -g -o argusd argusd.c
 
 
 clean:

@@ -230,7 +230,7 @@ int executar(char** comandos, int numComandos){
 
         for(i = 0; i < numComandos; i++){
                 //Primeiro comando
-                if(i == 0){
+                if(i == 0 && numComandos > 1){
                         if(pipe(p[i]) == -1){
                                 perror("pipe");
                                 return -1;
@@ -498,7 +498,6 @@ void sig_chld_handler(int signum){
         int status, pid;
         pid = wait(&status);
         int pos = procuraTarefaComPid(pid);
-        assert(pos >= 0);
         if(WEXITSTATUS(status) == 1) tarefas[pos]->estado = 1;
         else if (WEXITSTATUS(status) == 2) tarefas[pos]->estado = 2;
         else if (WEXITSTATUS(status) == 3) tarefas[pos]->estado = 3;
