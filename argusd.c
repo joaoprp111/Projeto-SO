@@ -8,23 +8,35 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <assert.h>
+
 typedef void (*sighandler_t)(int);
 
+/**
+ * Como estrutura principal global, para armazenar os comandos de cada tarefa, pids de processos filhos, do próprio processo e do seu estado,
+ * foi criada esta struct para depois construir um array de structs deste tipo, em que a primeira tarefa corresponde à struct da posição 0
+ * do array, a segunda à posição 1 e assim sucessivamente.
+ */
 typedef struct tarefa{
         char* comando;
-        int estado; // 1 terminada normalmente, 0 em execução, 2 terminada com kill, -1 terminado por erro dos execs
+        int estado; /* 1 terminada normalmente, 0 em execução, 2 terminada com kill, 3 terminação forçada pelo utilizador, 4 terminada
+        por tempo de inatividade entre pipes anónimos */
         int pid;
         int *pidfilhos;
         int nFilhos;
 } *Tarefa;
 
-Tarefa *tarefas = NULL;
+Tarefa *tarefas = NULL; //Array com a informação de cada tarefa
 int tempoExecucaoMax = 100; // em segundos
-int tempoInatividadeMax = 100;
+int tempoInatividadeMax = 100; // em segundos
 int numTarefas = 0;
-int returnStatus = -1;
-int pidInatividade;
+int returnStatus = -1; //Variável global que guarda o estado de retorno de um processo, depois de ter terminado
+int pidInatividade; //Pid dos processos que ativam o alarme de inatividade
+int fd_log; //Descritor dos log file
+//int fd_log_idx;
 
+/**
+ * Função auxiliar que transforma um inteiro em string
+ */
 char* itoa(int num, char *str){ 
     int i = 0;  
   
@@ -50,6 +62,9 @@ char* itoa(int num, char *str){
     return str; 
 } 
 
+/**
+ * Função auxiliar que verifica se há um pipe no comando do input
+ */
 int existePipe(char* token){
         int res = 0, i = 0;
 
@@ -169,7 +184,20 @@ void sig_term_handler(int signum){
         _exit(returnStatus);
 }
 
-int executar(char** comandos, int numComandos, int fd_log){
+int executar(char** comandos, int numComandos){
+
+        /*int offset0 = lseek(fd_log, 0, SEEK_CUR);
+        printf("offset antes de escrever: %d\n", offset0);
+        char offsets[SIZE] = "0 ";
+        strcat(offsets, "\0");
+        char* n = NULL;
+        n = itoa(offset0, n);
+        printf("Offset inicial: %s\n", n);
+        strcpy(offsets, n);
+        strcat(offsets, " ");
+        strcat(offsets, "\0");
+        write(fd_log_idx, offsets, strlen(offsets)+1);*/
+
         if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
             perror("signal");
             return -1;
@@ -256,6 +284,7 @@ int executar(char** comandos, int numComandos, int fd_log){
                                         close(p2[i-1][0]);
 
                                         dup2(fd_log, 1);
+
                                         exec_command(comandos[i], numComandos);
                                         _exit(-1);
                                 default:
@@ -333,6 +362,16 @@ int executar(char** comandos, int numComandos, int fd_log){
                 printf("status do filho: %d\n", WEXITSTATUS(status[i]));
         }
 
+        /*int offset = lseek(fd_log, 0, SEEK_CUR);
+        printf("offset depois de escrever: %d\n", offset);
+        char offsets2[SIZE] = "1488\n";
+        strcat(offsets2, "\0");
+        char* n1 = NULL;
+        n1 = itoa(offset, n1);
+        strcpy(offsets2, n1);
+        strcat(offsets2, "\n"); strcat(offsets2, "\0");
+        write(fd_log_idx, offsets2, strlen(offsets2)+1);*/
+
         alarm(0);
 
         for(i = 0; i < (numComandos*2) - 1; i++){
@@ -369,7 +408,7 @@ char** parsing(char* bufferLeitura, int *numComandos){
                 if(*numComandos == 1 && pipe){
                         tam = strlen(token);
                         token[tam-1] = '\0';
-                }
+                }char output[SIZE] = "nova tarefa #";
 
                 comandos = (char**) realloc(comandos, (*numComandos+1) * sizeof(char*));
                 comandos[*numComandos] = strdup(token);
@@ -467,10 +506,13 @@ void sig_int_handler(int signum){
                 free(tarefas[i]);
         }
         free(tarefas);
+        write(1, "Servidor terminado!\n", strlen("Servidor terminado!\n")+1);
+        close(fd_log);
+        close(fd_log_idx);
         exit(0);
 }
 
-void sig_segv_handler(int signum){
+/*void sig_segv_handler(int signum){
     int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
 
     char* mensagem = strdup("Talvez tenha introduzido uma opção inválida!\nExperimente usar a ajuda (-h)\n");
@@ -487,7 +529,7 @@ void sig_segv_handler(int signum){
     close(fd_escrita_canal);
 
     exit(0);
-}
+}*/
 
 void ajuda(){
     int fd = open("canalServidorCliente", O_WRONLY);
@@ -503,14 +545,26 @@ void ajuda(){
 
 int main(int argc, char *argv[]) {
 
+        fd_log = open("log.txt", O_CREAT | O_RDWR | O_TRUNC, 0660);
+        if(fd_log < 0){
+                perror("log");
+                return -1;
+        }
+
+        fd_log_idx = open("log.idx", O_CREAT | O_RDWR | O_TRUNC, 0660);
+        if(fd_log_idx < 0){
+                perror("log");
+                return -1;
+        }
+
         if(signal(SIGINT, sig_int_handler) == SIG_ERR){
             perror("signal");
             return -1;    
         }
-        if(signal(SIGSEGV, sig_segv_handler) == SIG_ERR){
+        /*if(signal(SIGSEGV, sig_segv_handler) == SIG_ERR){
             perror("signal");
             return -1;
-        }
+        }*/
         if(signal(SIGCHLD, sig_chld_handler) == SIG_ERR){
             perror("signal");
             return -1;
@@ -520,12 +574,7 @@ int main(int argc, char *argv[]) {
 
         /* Assumindo que o fifo está aberto, agora o servidor lê do fifo e faz parsing dos comandos*/
         int fd_leitura_canal = -1, fd_escrita_canal = -1;
-        int fd_log = open("log.txt", O_CREAT | O_RDWR | O_TRUNC, 0660);
-        if(fd_log < 0){
-                perror("log");
-                return -1;
-        }
-
+    
         while((fd_leitura_canal = open("canalClienteServidor", O_RDONLY)) >= 0){
                 char bufferLeitura[SIZE];
                 char** comandos = NULL;
@@ -570,7 +619,7 @@ int main(int argc, char *argv[]) {
                         if(pid == 0){
                                 signal(SIGTERM, sig_term_handler);
                                 int ret = 0;
-                                ret = executar(comandos+1, numComandos-1, fd_log);
+                                ret = executar(comandos+1, numComandos-1);
                                 if(!ret) _exit(1); //terminou com sucesso
                                 else if(ret == 2) _exit(2);
                                 else if(ret == 3) _exit(3);
