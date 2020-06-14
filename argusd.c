@@ -1,3 +1,4 @@
+#include "argus.h"
 #include <sys/wait.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -8,8 +9,6 @@
 #include <signal.h>
 #include <assert.h>
 typedef void (*sighandler_t)(int);
-
-#define SIZE 512
 
 typedef struct tarefa{
         char* comando;
@@ -29,7 +28,6 @@ int pidInatividade;
 char* itoa(int num, char *str){ 
     int i = 0;  
   
-    // Process individual digits 
     while (num != 0){ 
         int rem = num % 10; 
         str = (char*) realloc(str, (i+1) * sizeof(char*));
@@ -109,7 +107,7 @@ void listarTarefasExecucao(int num){
 
         int i = 0;
         int existeTExec = 0;
-        char outputfinal[256];
+        char outputfinal[SIZE];
         printf("n tarefas %d\n", num);
         for(i = 0; i < num; i++){
                 printf("estado %d\n", tarefas[i]->estado);
@@ -172,10 +170,20 @@ void sig_term_handler(int signum){
 }
 
 int executar(char** comandos, int numComandos, int fd_log){
-        signal(SIGCHLD, SIG_DFL);
-        signal(SIGALRM, sig_alrm_handler);
-        signal(SIGUSR1, sig_usr1_handler);
-        char buffer[256];
+        if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
+            perror("signal");
+            return -1;
+        }
+        if(signal(SIGALRM, sig_alrm_handler) == SIG_ERR){
+            perror("signal");
+            return -1;
+        }
+        if(signal(SIGUSR1, sig_usr1_handler) == SIG_ERR){
+            perror("signal");
+            return -1;
+        }
+
+        char buffer[SIZE];
         int i, pid, bytes, j = 0;
         int status[numComandos];
         int p[numComandos-1][2];
@@ -462,32 +470,56 @@ void sig_int_handler(int signum){
         exit(0);
 }
 
-void sig_pipe_handler(int signum){
-        printf("\nSIGPIPE\n");
+void sig_segv_handler(int signum){
+    int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
+
+    char* mensagem = strdup("Talvez tenha introduzido uma opção inválida!\nExperimente usar a ajuda (-h)\n");
+
+    write(fd_escrita_canal, mensagem, strlen(mensagem)+1);
+    signal(SIGSEGV, SIG_DFL);
+    int i;
+        for(i = 0; i < numTarefas; i++){
+                free(tarefas[i]->comando);
+                free(tarefas[i]);
+        }
+    free(tarefas);
+
+    close(fd_escrita_canal);
+
+    exit(0);
 }
 
-void ajuda (){
-	int fd = open("canalServidorCliente", O_WRONLY);
-	write(fd, "tempo-inactividade segs\n", strlen("tempo-inactividade segs\n"));
-	write(fd, "tempo-execucao segs\n", strlen("tempo-execucao segs\n"));
-	write(fd, "executar p1 | p2 ... | pn\n", strlen("executar p1 | p2 ... | pn\n"));
-	write(fd, "listar\n", strlen("listar\n"));
-	write(fd, "terminar n\n", strlen("terminar n\n"));
-	write(fd, "historico\n", strlen("historico\n"));
-	close(fd);
+void ajuda(){
+    int fd = open("canalServidorCliente", O_WRONLY);
+    write(fd, "tempo-inactividade segs\n", strlen("tempo-inactividade segs\n"));
+    write(fd, "tempo-execucao segs\n", strlen("tempo-execucao segs\n"));
+    write(fd, "executar p1 | p2 ... | pn\n", strlen("executar p1 | p2 ... | pn\n"));
+    write(fd, "listar\n", strlen("listar\n"));
+    write(fd, "terminar n\n", strlen("terminar n\n"));
+    write(fd, "historico\n", strlen("historico\n"));
+    close(fd);
 }
-	
+    
 
 int main(int argc, char *argv[]) {
 
-        signal(SIGINT, sig_int_handler);
-        signal(SIGPIPE, sig_pipe_handler);
-        signal(SIGCHLD, sig_chld_handler);
+        if(signal(SIGINT, sig_int_handler) == SIG_ERR){
+            perror("signal");
+            return -1;    
+        }
+        if(signal(SIGSEGV, sig_segv_handler) == SIG_ERR){
+            perror("signal");
+            return -1;
+        }
+        if(signal(SIGCHLD, sig_chld_handler) == SIG_ERR){
+            perror("signal");
+            return -1;
+        }
 
         /*O servidor quando arranca já deve ter o fifo criado */
 
         /* Assumindo que o fifo está aberto, agora o servidor lê do fifo e faz parsing dos comandos*/
-        int fd_leitura_canal = -1, fd_escrita_canal = -1; /* Descritor de leitura do fifo */
+        int fd_leitura_canal = -1, fd_escrita_canal = -1;
         int fd_log = open("log.txt", O_CREAT | O_RDWR | O_TRUNC, 0660);
         if(fd_log < 0){
                 perror("log");
@@ -508,12 +540,13 @@ int main(int argc, char *argv[]) {
                 comandos = parsing(copia, &numComandos);
                 free(copia);
                 printf("%s\n",comandos[0]);
-                //for(int i = 0; i < numComandos; i++) printf("comandos[%d]: %s\n", i, comandos[i]);
+                
                 if((strcmp(comandos[0],"-e") == 0) || (strcmp(comandos[0], "executar") == 0)){
 
                         tarefas = (Tarefa*) realloc(tarefas, (numTarefas+1)*sizeof(Tarefa));
                         tarefas[numTarefas] = (Tarefa) malloc(sizeof(struct tarefa));
-                        tarefas[numTarefas]->comando = strdup(bufferLeitura+3);  /*Para remover a flag e o espaço */
+                        if(strcmp(comandos[0],"-e") == 0) tarefas[numTarefas]->comando = strdup(bufferLeitura+3);  /*Para remover a flag e o espaço */
+                        else tarefas[numTarefas]->comando = strdup(bufferLeitura+strlen("executar "));
                         //printf("%s\n", tarefas[numTarefas]->comando);
                         tarefas[numTarefas]->pid = 0;
                         tarefas[numTarefas]->pidfilhos = NULL;
@@ -522,9 +555,10 @@ int main(int argc, char *argv[]) {
 
                         char* n = NULL;
                         n = itoa(numTarefas+1, n);
-                        char output[14] = "nova tarefa #";
+                        char output[SIZE] = "nova tarefa #";
                         strcat(output, n);
                         strcat(output, "\n");
+                        strcat(output, "\0");
                         fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
                         write(fd_escrita_canal, output, strlen(output)+1);
                         close(fd_escrita_canal);
