@@ -196,13 +196,6 @@ void sig_term_handler(int signum){
 
 int executar(char** comandos, int numComandos){
 
-        int offset0 = lseek(fd_log, 0, SEEK_CUR);
-
-        char* n = NULL;
-        n = itoa(offset0, n);
-        write(fd_log_idx, n, strlen(n));
-        write(fd_log_idx, " ", 1);
-
         if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
             perror("signal");
             return -1;
@@ -223,7 +216,14 @@ int executar(char** comandos, int numComandos){
         int p2[numComandos-1][2];
         tarefas[numTarefas]->pidfilhos = (int*) malloc(((numComandos * 2)-1) * sizeof(int));
         assert(numTarefas+1 > 0);
-
+        int offset0 = lseek(fd_log, 0, SEEK_CUR);
+        char* n = NULL;
+        n = itoa(offset0, n);
+        char* aux = NULL;
+        aux = itoa(numTarefas+1,aux);
+        strcat(aux,"-");
+        strcat(aux,n);
+        strcat(aux," ");
         alarm(tempoExecucaoMax);
 
         for(i = 0; i < numComandos; i++){
@@ -357,11 +357,14 @@ int executar(char** comandos, int numComandos){
 
         for(i = 0; i < (numComandos*2) - 1; i++) wait(&status[i]);
 
+
+
         int offset = lseek(fd_log, 0, SEEK_CUR);
-    
         char* n1 = NULL;
         n1 = itoa(offset, n1);
-        write(fd_log_idx, n1, strlen(n1)); write(fd_log_idx, "\n", 1);
+        strcat(aux,n1);
+        strcat(aux,"\n");
+        write(fd_log_idx, aux, strlen(aux));
 
         alarm(0);
 
@@ -511,31 +514,46 @@ void procurarLinha(int pos, int *inicio, int *fim){
     int posfd = lseek(fd_log_idx, 0, SEEK_CUR);
     lseek(fd_log_idx, 0, SEEK_SET);
     char c;
-    char buffer[SIZE];
-    int i = 0, posbuffer = 0, counter = 0;
-    while(i < pos){
-            c = '\0';
-            while(c != '\n')
-                read(fd_log_idx, &c, 1);
-            i++;
-    }
-
-    c = '\0';
-
-    while(c != '\n'){
-            read(fd_log_idx, &c, 1);
-            buffer[posbuffer++] = c;
-    }
+    char buffer[SIZE],linha[SIZE];
+    int i = 0,j = 0;
+    int nEncontrado = 0;
+    while(!nEncontrado){
+    	bzero(buffer,SIZE);
+    	i = 0;
+    	c = '\0';
+    	while (c != '-'){
+    		read(fd_log_idx,&c,1);
+    		buffer[i] = c;
+    		i++;
+    	}
+    	char* n = NULL;
+    	n = itoa(pos,n);
+    	if (strcmp(n,buffer) == 0){
+    		nEncontrado = 1;
+    		c = '\0';
+    		j = 0;
+    		bzero(linha,SIZE);
+    		while (c != '\n'){
+    			read(fd_log_idx,&c,1);
+    			linha[j] = c;
+    			j++;
+    		}
     
-    buffer[posbuffer-1] = '\0';
-
-    char* copia = buffer;
-    while((copia = strtok(copia, " ")) != NULL && counter < 1){
-            *inicio = atoi(copia);
-            copia = strtok(NULL, " ");
-            *fim = atoi(copia);
-            counter++;
+    	}
+    	else {
+    		c = '\0';
+    		while (c != '\n'){
+    			read(fd_log_idx,&c,1);
+    		}
+    	}
     }
+    char* copia = linha;
+    int counter = 0;
+    while((copia = strtok(linha," ")) != NULL && counter < 1){
+    	*inicio = atoi(copia);
+    	copia = strtok(NULL," ");
+    	*fim = atoi(copia);
+	}
 
     lseek(fd_log_idx, posfd, SEEK_SET);
 }
@@ -559,12 +577,12 @@ void output(int pos){
 
         int fd = open("log.txt", O_RDONLY);
         int size = fim - inicio;
-        int pos = lseek(fd, 0, SEEK_CUR);
+        int posfd = lseek(fd, 0, SEEK_CUR);
         lseek(fd, inicio, SEEK_SET);
 
         char buffer[SIZE];
         read(fd, buffer, size);
-        lseek(fd, pos, SEEK_SET);
+        lseek(fd, posfd, SEEK_SET);
         close(fd);
 
         int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
@@ -661,7 +679,7 @@ int main(int argc, char *argv[]) {
                 else if((strcmp(comandos[0], "-i") == 0 )|| (strcmp(comandos[0], "tempo-inatividade") == 0)) alterarTempoInatividade(atoi(comandos[1]));
                 else if((strcmp(comandos[0], "-r") == 0 )|| (strcmp(comandos[0], "historico") == 0)) tarefasTerminadas();
                 else if((strcmp(comandos[0], "-h") == 0 )|| (strcmp(comandos[0], "ajuda") == 0)) ajuda();
-                else if((strcmp(comandos[0], "-o") == 0 )|| (strcmp(comandos[0], "output") == 0)) output(atoi(comandos[1])-1);
+                else if((strcmp(comandos[0], "-o") == 0 )|| (strcmp(comandos[0], "output") == 0)) output(atoi(comandos[1]));
                 else{
                         char* mensagem = "Flag inválida!\n";
                         write(1, mensagem, strlen(mensagem)+1);
