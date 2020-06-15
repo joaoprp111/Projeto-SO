@@ -125,6 +125,9 @@ void terminarTarefa(int pos){
 }
 
 
+/**
+ * Mostra todas as tarefas que estão a ser executadas
+ */
 void listarTarefasExecucao(int num){
 
         int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
@@ -154,6 +157,11 @@ void listarTarefasExecucao(int num){
         close(fd_escrita_canal);
 }
 
+
+
+/**
+ * Para todos os processos
+ */
 void matarProcessos(){
         int i;
         for(i = 0; i < tarefas[numTarefas]->nFilhos; i++){
@@ -162,6 +170,11 @@ void matarProcessos(){
         kill(getpid(), SIGTERM);
 }
 
+
+/**
+ * Recebe uma terminação forçada por excesso de tempo e altera a variável de retorno de estado
+ e mata os processos em execução
+ */
 void sig_alrm_handler(int signum){
     int pidRecetorAlarme = getpid();
     int j, encontrado = 0;
@@ -176,15 +189,26 @@ void sig_alrm_handler(int signum){
     matarProcessos();
 }
 
+/**
+ * Mata o processo quando o tempo limite de inatividade é ultrapassado
+ */
 void sig_usr1_handler(int signum){
         returnStatus = 3;
         if(signum == SIGUSR1) matarProcessos();
 }
 
+/**
+ * Mata o processo e retorna o sinal pretendido
+ */
 void sig_term_handler(int signum){
         _exit(returnStatus);
 }
 
+
+/**
+ * Função principal que executa tarefas e cria filhos que conta o tempo de inatividade.
+ O tempo de execução é contado através do pai vezes filhos específicos
+ */
 int executar(char** comandos, int numComandos){
 
         if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
@@ -398,6 +422,10 @@ int executar(char** comandos, int numComandos){
         return 0;
 }
 
+
+/**
+ * Efetua o parsing
+ */
 char** parsing(char* bufferLeitura, int *numComandos){
         
         char** comandos = NULL;
@@ -440,6 +468,10 @@ char** parsing(char* bufferLeitura, int *numComandos){
         return comandos;
 }
 
+
+/**
+ * Histórico de tarefas terminadas
+ */
 void tarefasTerminadas(){
     int i, fd = open("canalServidorCliente", O_WRONLY), count = 0;
     for(i = 0; i < numTarefas; i++){
@@ -461,6 +493,11 @@ void tarefasTerminadas(){
     close(fd);
 }
 
+
+/**
+ * Altera o tempo de inatividade
+ */
+void 
 void alterarTempoInatividade(int tempo){
         int fd = open("canalServidorCliente", O_WRONLY);
 
@@ -471,6 +508,9 @@ void alterarTempoInatividade(int tempo){
         close(fd);
 }
 
+/**
+ * Altera o limite máximo de tempo de execução
+ */
 void alterarTempoMaxExec(int tempo){
         int fd = open("canalServidorCliente", O_WRONLY);
 
@@ -481,6 +521,10 @@ void alterarTempoMaxExec(int tempo){
         close(fd);
 }
 
+
+/**
+ * Procura uma tarefa específica 
+ */
 int procuraTarefaComPid(int pid){
         int i, encontrado = 0, res = -1;
         for(i = 0; i < numTarefas && !encontrado; i++){
@@ -493,6 +537,9 @@ int procuraTarefaComPid(int pid){
         return res;
 }
 
+/**
+ * Serve para alterar o estado com que o filho terminou
+ */
 void sig_chld_handler(int signum){
         int status, pid;
         pid = wait(&status);
@@ -504,6 +551,9 @@ void sig_chld_handler(int signum){
         else tarefas[pos]->estado = -1;
 }
 
+/**
+ * Quando o utilizador clica no CTRL + C a estrutura é liberte em memória e termina o programa
+ */
 void sig_int_handler(int signum){
         int i;
         for(i = 0; i < numTarefas; i++){
@@ -515,6 +565,10 @@ void sig_int_handler(int signum){
         exit(0);
 }
 
+
+/**
+ * Mostra as opçãos disponíveis do programa
+ */
 void ajuda(){
     int fd = open("canalServidorCliente", O_WRONLY);
     write(fd, "tempo-inactividade segs\n", strlen("tempo-inactividade segs\n"));
@@ -526,6 +580,11 @@ void ajuda(){
     close(fd);
 }
 
+
+
+/**
+ * Altera o limite máximo de tempo de execução
+ */
 void procurarLinha(int pos, int *inicio, int *fim){
 
     char c = '\0', i;
@@ -567,6 +626,10 @@ void procurarLinha(int pos, int *inicio, int *fim){
     }
 }
 
+
+/**
+ * Indica o output de uma tarefa específica
+ */
 void output(int pos){
 
     if(numTarefas == 0){
@@ -606,6 +669,7 @@ void output(int pos){
     }
 }
     
+
 
 int main(int argc, char *argv[]) {
 
