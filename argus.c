@@ -38,8 +38,6 @@ void tratarInputShell(int fd_escrita_canal){
             if(c != '\"') buffer[bytesread++] = c; 
     }
     buffer[bytesread++] = '\0';
-
-    write(1, buffer, bytesread);
             
     write(fd_escrita_canal, buffer, bytesread);
 }

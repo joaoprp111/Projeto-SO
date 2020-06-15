@@ -31,8 +31,6 @@ int tempoInatividadeMax = 100; // em segundos
 int numTarefas = 0;
 int returnStatus = -1; //Variável global que guarda o estado de retorno de um processo, depois de ter terminado
 int pidInatividade; //Pid dos processos que ativam o alarme de inatividade
-int fd_log; //Descritor dos log file
-int fd_log_idx;
 
 /**
  * Função auxiliar que transforma um inteiro em string
@@ -113,8 +111,6 @@ int exec_command(char* comandos, int n){
 void terminarTarefa(int pos){
         int fd = open("canalServidorCliente", O_WRONLY);
 
-        printf("Pid: %d\n", tarefas[pos]->pid);
-
         if(pos < numTarefas && pos >= 0 && tarefas[pos]->estado == 0){
                 kill(tarefas[pos]->pid, SIGUSR1);
                 char* str = "Tarefa terminada com sucesso!\n";
@@ -136,9 +132,7 @@ void listarTarefasExecucao(int num){
         int i = 0;
         int existeTExec = 0;
         char outputfinal[SIZE];
-        printf("n tarefas %d\n", num);
         for(i = 0; i < num; i++){
-                printf("estado %d\n", tarefas[i]->estado);
                 if(tarefas[i]->estado == 0){
                         existeTExec = 1;
                         char* n = NULL;
@@ -169,17 +163,14 @@ void matarProcessos(){
 }
 
 void sig_alrm_handler(int signum){
-    printf("\n[DEBUG] ATINGIU LIMITE DE EXECUÇÃO OU INATIVIDADE\n");
     int pidRecetorAlarme = getpid();
     int j, encontrado = 0;
     if(pidRecetorAlarme == pidInatividade) encontrado = 1;
 
     if(!encontrado){
-        printf("Execução\n");
         returnStatus = 2;
     }
     else{
-        printf("Inatividade\n");
         returnStatus = 4;
     }
     matarProcessos();
@@ -216,14 +207,15 @@ int executar(char** comandos, int numComandos){
         int p2[numComandos-1][2];
         tarefas[numTarefas]->pidfilhos = (int*) malloc(((numComandos * 2)-1) * sizeof(int));
         assert(numTarefas+1 > 0);
-        int offset0 = lseek(fd_log, 0, SEEK_CUR);
-        char* n = NULL;
-        n = itoa(offset0, n);
-        char* aux = NULL;
-        aux = itoa(numTarefas+1,aux);
-        strcat(aux,"-");
-        strcat(aux,n);
-        strcat(aux," ");
+
+        int fd_log = open("log.txt", O_CREAT | O_RDWR | O_APPEND, 0660);
+        if(fd_log < 0){
+            perror("open");
+            return -1;
+        }
+        int inicio = lseek(fd_log, 0, SEEK_END); //Pos onde vamos começar a escrever o op
+        close(fd_log);
+
         alarm(tempoExecucaoMax);
 
         for(i = 0; i < numComandos; i++){
@@ -288,7 +280,13 @@ int executar(char** comandos, int numComandos){
                                         dup2(p2[i-1][0], 0);
                                         close(p2[i-1][0]);
 
-                                        dup2(fd_log, 1);
+                                        int fd = open("log.txt", O_CREAT | O_RDWR | O_APPEND, 0660);
+                                        if(fd < 0){
+                                            perror("log");
+                                            return -1;
+                                        }
+                                        dup2(fd, 1);
+                                        close(fd);
 
                                         exec_command(comandos[i], numComandos);
                                         _exit(-1);
@@ -357,15 +355,6 @@ int executar(char** comandos, int numComandos){
 
         for(i = 0; i < (numComandos*2) - 1; i++) wait(&status[i]);
 
-
-
-        int offset = lseek(fd_log, 0, SEEK_CUR);
-        char* n1 = NULL;
-        n1 = itoa(offset, n1);
-        strcat(aux,n1);
-        strcat(aux,"\n");
-        write(fd_log_idx, aux, strlen(aux));
-
         alarm(0);
 
         for(i = 0; i < (numComandos*2) - 1; i++){
@@ -374,6 +363,35 @@ int executar(char** comandos, int numComandos){
                 else if(WEXITSTATUS(status[i]) == 4) return 4;
                 else if (WEXITSTATUS(status[i] == 255)) return -1;
         }
+
+        char* n = itoa(numTarefas+1, NULL);
+
+        int fd_idx = open("log.idx", O_CREAT | O_RDWR | O_APPEND, 0660);
+        if(fd_idx < 0){
+            perror("open");
+            return -1;
+        }
+
+        write(fd_idx, n, strlen(n));
+        write(fd_idx, "-", 1);
+        char* in = itoa(inicio, NULL);
+        write(fd_idx, in, strlen(in));
+        write(fd_idx, " ", 1);
+
+        fd_log = open("log.txt", O_CREAT | O_RDWR | O_APPEND, 0660);
+        if(fd_log < 0){
+            perror("open");
+            return -1;
+        }
+
+        int fim = lseek(fd_log, 0, SEEK_END);
+        close(fd_log);
+
+        char* f = itoa(fim, NULL);
+        write(fd_idx, f, strlen(f));
+        write(fd_idx, "\n", 1);
+
+        close(fd_idx);
 
         assert(tarefas[numTarefas]->nFilhos > 0);
 
@@ -399,8 +417,9 @@ char** parsing(char* bufferLeitura, int *numComandos){
                 if(*numComandos == 1 && pipe){
                         tam = strlen(token);
                         token[tam-1] = '\0';
-                }char output[SIZE] = "nova tarefa #";
+                }
 
+                char output[SIZE] = "nova tarefa #";
                 comandos = (char**) realloc(comandos, (*numComandos+1) * sizeof(char*));
                 comandos[*numComandos] = strdup(token);
                 (*numComandos)++;
@@ -493,8 +512,6 @@ void sig_int_handler(int signum){
         }
         free(tarefas);
         write(1, "Servidor terminado!\n", strlen("Servidor terminado!\n")+1);
-        close(fd_log);
-        close(fd_log_idx);
         exit(0);
 }
 
@@ -511,51 +528,43 @@ void ajuda(){
 
 void procurarLinha(int pos, int *inicio, int *fim){
 
-    int posfd = lseek(fd_log_idx, 0, SEEK_CUR);
-    lseek(fd_log_idx, 0, SEEK_SET);
-    char c;
-    char buffer[SIZE],linha[SIZE];
-    int i = 0,j = 0;
-    int nEncontrado = 0;
-    while(!nEncontrado){
-    	bzero(buffer,SIZE);
-    	i = 0;
-    	c = '\0';
-    	while (c != '-'){
-    		read(fd_log_idx,&c,1);
-    		buffer[i] = c;
-    		i++;
-    	}
-    	char* n = NULL;
-    	n = itoa(pos,n);
-    	if (strcmp(n,buffer) == 0){
-    		nEncontrado = 1;
-    		c = '\0';
-    		j = 0;
-    		bzero(linha,SIZE);
-    		while (c != '\n'){
-    			read(fd_log_idx,&c,1);
-    			linha[j] = c;
-    			j++;
-    		}
-    
-    	}
-    	else {
-    		c = '\0';
-    		while (c != '\n'){
-    			read(fd_log_idx,&c,1);
-    		}
-    	}
-    }
-    char* copia = linha;
-    int counter = 0;
-    while((copia = strtok(linha," ")) != NULL && counter < 1){
-    	*inicio = atoi(copia);
-    	copia = strtok(NULL," ");
-    	*fim = atoi(copia);
-	}
+    char c = '\0', i;
+    char buffer[SIZE];
+    int fd_idx = open("log.idx", O_RDONLY);
+    int encontrar = 0;
 
-    lseek(fd_log_idx, posfd, SEEK_SET);
+    while(!encontrar){
+        i = 0;
+        bzero(buffer, SIZE);
+        while(c != '-'){
+            read(fd_idx, &c, 1);
+            buffer[i++] = c;
+        }
+        buffer[i] = '\0';
+        int numEncontrado = atoi(buffer);
+        if(numEncontrado == pos) encontrar = 1;
+        else{
+            //mudar de linha
+            c = '\0';
+            while(c != '\n') read(fd_idx, &c, 1);
+        }
+    }
+    c = '\0';
+    char bufferNovo[SIZE];
+    int posb = 0;
+    while(c != '\n'){
+        read(fd_idx, &c, 1);
+        bufferNovo[posb++] = c;
+    }
+    bufferNovo[posb-1] = '\0';
+
+    //parsing
+    char* p = bufferNovo;
+    if((p = strtok(p, " ")) != NULL){
+        *inicio = atoi(p);
+        p = strtok(NULL, " ");
+        *fim = atoi(p);
+    }
 }
 
 void output(int pos){
@@ -565,24 +574,30 @@ void output(int pos){
         write(fd_escrita_canal, "Não existem outputs!\n", strlen("Não existem outputs!\n")+1);
         close(fd_escrita_canal);
     }
+    else if(tarefas[pos-1]->estado != 1 || pos > numTarefas){
+        int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
+        write(fd_escrita_canal, "Não existe output para essa tarefa!\n", strlen("Não existe output para essa tarefa!\n")+1);
+        close(fd_escrita_canal);
+    }
     else{
         int inicio = 0, fim = 0;
         procurarLinha(pos, &inicio, &fim);
 
-        if(inicio == fim || tarefas[pos]->estado != 1){
+        if(inicio == fim){
             int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
             write(fd_escrita_canal, "Esta tarefa não tem output!\n", strlen("Esta tarefa não tem output!\n")+1);
             close(fd_escrita_canal);
+            return;
         }
 
         int fd = open("log.txt", O_RDONLY);
+        int posLog = lseek(fd, 0, SEEK_CUR);
         int size = fim - inicio;
-        int posfd = lseek(fd, 0, SEEK_CUR);
         lseek(fd, inicio, SEEK_SET);
 
         char buffer[SIZE];
         read(fd, buffer, size);
-        lseek(fd, posfd, SEEK_SET);
+        lseek(fd, posLog, SEEK_SET);
         close(fd);
 
         int fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
@@ -593,18 +608,6 @@ void output(int pos){
     
 
 int main(int argc, char *argv[]) {
-
-        fd_log = open("log.txt", O_CREAT | O_RDWR | O_TRUNC, 0660);
-        if(fd_log < 0){
-                perror("log");
-                return -1;
-        }
-
-        fd_log_idx = open("log.idx", O_CREAT | O_RDWR | O_TRUNC, 0660);
-        if(fd_log_idx < 0){
-                perror("log");
-                return -1;
-        }
 
         if(signal(SIGINT, sig_int_handler) == SIG_ERR){
             perror("signal");
@@ -659,7 +662,6 @@ int main(int argc, char *argv[]) {
                         pid = fork();
                         if(pid < 0) {perror("fork"); return -1;}
                         if(pid == 0){
-                                printf("Teste\n");
                                 signal(SIGTERM, sig_term_handler);
                                 int ret = 0;
                                 ret = executar(comandos+1, numComandos-1);
@@ -676,13 +678,17 @@ int main(int argc, char *argv[]) {
                 else if((strcmp(comandos[0], "-l") == 0 )|| (strcmp(comandos[0], "listar") == 0)) listarTarefasExecucao(numTarefas);
                 else if((strcmp(comandos[0], "-m") == 0 )|| (strcmp(comandos[0], "tempo-execucao") == 0)) alterarTempoMaxExec(atoi(comandos[1]));
                 else if((strcmp(comandos[0], "-t") == 0 )|| (strcmp(comandos[0], "terminar") == 0)) terminarTarefa(atoi(comandos[1])-1);
-                else if((strcmp(comandos[0], "-i") == 0 )|| (strcmp(comandos[0], "tempo-inatividade") == 0)) alterarTempoInatividade(atoi(comandos[1]));
+                else if((strcmp(comandos[0], "-i") == 0 )|| (strcmp(comandos[0], "tempo-inactividade") == 0)) alterarTempoInatividade(atoi(comandos[1]));
                 else if((strcmp(comandos[0], "-r") == 0 )|| (strcmp(comandos[0], "historico") == 0)) tarefasTerminadas();
                 else if((strcmp(comandos[0], "-h") == 0 )|| (strcmp(comandos[0], "ajuda") == 0)) ajuda();
                 else if((strcmp(comandos[0], "-o") == 0 )|| (strcmp(comandos[0], "output") == 0)) output(atoi(comandos[1]));
                 else{
+                        fd_escrita_canal = open("canalServidorCliente", O_WRONLY);
+        
                         char* mensagem = "Flag inválida!\n";
-                        write(1, mensagem, strlen(mensagem)+1);
+                        write(fd_escrita_canal, mensagem, strlen(mensagem)+1);
+
+                        close(fd_escrita_canal);
                 }
 
                 close(fd_leitura_canal);
