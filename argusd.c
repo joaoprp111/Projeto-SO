@@ -497,7 +497,6 @@ void tarefasTerminadas(){
 /**
  * Altera o tempo de inatividade
  */
-void 
 void alterarTempoInatividade(int tempo){
         int fd = open("canalServidorCliente", O_WRONLY);
 

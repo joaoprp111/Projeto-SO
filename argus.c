@@ -1,4 +1,4 @@
-\#include "argus.h"
+#include "argus.h"
 #include <sys/wait.h>
 #include <stdio.h>
 #include <unistd.h>
